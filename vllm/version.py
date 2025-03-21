@@ -9,8 +9,8 @@ except Exception:
     #               RuntimeWarning,
     #               stacklevel=2)
 
-    __version__ = "dev"
-    __version_tuple__ = (0, 8, __version__)
+    __version__ = "0.8.2.dev"
+    __version_tuple__ = (0, 8, 2, "dev")
 
 
 def _prev_minor_version_was(version_str):
