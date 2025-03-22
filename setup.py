@@ -15,6 +15,7 @@ import torch
 from packaging.version import Version, parse
 from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
+from setuptools_scm import get_version
 from torch.utils.cpp_extension import CUDA_HOME, ROCM_HOME
 
 
@@ -538,8 +539,7 @@ def get_gaudi_sw_version():
 
 
 def get_vllm_version() -> str:
-    # version = get_version(write_to="vllm/_version.py")
-    version = "0.8.2.dev"
+    version = get_version(write_to="vllm/_version.py")
     sep = "+" if "+" not in version else "."  # dev versions might contain +
 
     if _no_device():
