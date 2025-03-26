@@ -1625,9 +1625,7 @@ class EngineArgs:
         if (self.max_num_partial_prefills
                 != EngineArgs.max_num_partial_prefills
                 or self.max_long_partial_prefills
-                != EngineArgs.max_long_partial_prefills
-                or self.long_prefill_token_threshold
-                != EngineArgs.long_prefill_token_threshold):
+                != EngineArgs.max_long_partial_prefills):
             _raise_or_fallback(feature_name="Concurrent Partial Prefill",
                                recommend_to_remove=False)
             return False
@@ -1666,9 +1664,8 @@ class EngineArgs:
             _raise_or_fallback(feature_name=name, recommend_to_remove=True)
             return False
 
-        # No support for device type other than CUDA, AMD (experiemntal) or
-        # TPU (experimental) so far.
-        if not (current_platform.is_cuda_alike() or current_platform.is_tpu()):
+        # Platforms must decide if they can support v1 for this model
+        if not current_platform.supports_v1(model_config=model_config):
             _raise_or_fallback(
                 feature_name=f"device type={current_platform.device_type}",
                 recommend_to_remove=False)
