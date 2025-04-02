@@ -20,6 +20,7 @@ def merge_attn_states(
     num_query_heads = output.shape[1]
     head_size = output.shape[2]
     padded_head_size = triton.next_power_of_2(head_size)
+
     # TODO(woosuk): Use CUDA kernel instead of Triton to minimize CPU overhead.
     merge_attn_states_kernel[(num_tokens, num_query_heads)](
         output,
@@ -53,15 +54,8 @@ def merge_attn_states_kernel(
 
     p_lse = tl.load(prefix_lse + head_idx * num_tokens + token_idx)
     s_lse = tl.load(suffix_lse + head_idx * num_tokens + token_idx)
-    max_lse = tl.maximum(p_lse, s_lse)
-    p_lse = p_lse - max_lse
-    s_lse = s_lse - max_lse
-    out_se = (tl.exp(p_lse) + tl.exp(s_lse))
 
-    if OUTPUT_LSE:
-        out_lse = tl.log(out_se) + max_lse
-        tl.store(output_lse + head_idx * num_tokens + token_idx, out_lse)
-
+    # cp.async before max/exp calculate
     head_arange = tl.arange(0, PADDED_HEAD_SIZE)
     head_mask = head_arange < HEAD_SIZE
     p_out = tl.load(prefix_output + token_idx * num_heads * HEAD_SIZE +
@@ -71,11 +65,34 @@ def merge_attn_states_kernel(
                     head_idx * HEAD_SIZE + head_arange,
                     mask=head_mask)
 
+    # FA2 and FA3 have different behavior for when the sum-exp is 0, this namely
+    # arises with 0 len seqlens. FA3 returns -inf here while FA2 returns inf.
+    # If we see an inf assume FA2 and convert inf to -inf for consistency
+    # and correctness. Inf generally doesn't make sense in this context outside
+    # of undefined-behavior/FA2-case, so I think this a safe assumption.
+    p_lse = float('-inf') if p_lse == float('inf') else p_lse
+    s_lse = float('-inf') if s_lse == float('inf') else s_lse
+
+    max_lse = tl.maximum(p_lse, s_lse)
+    p_lse = p_lse - max_lse
+    s_lse = s_lse - max_lse
+    # reuse precompute exp values
+    p_lse_exp = tl.exp(p_lse)
+    s_lse_exp = tl.exp(s_lse)
+    out_se = (p_lse_exp + s_lse_exp)
+    # out_se = (tl.exp(p_lse) + tl.exp(s_lse))
+
+    if OUTPUT_LSE:
+        out_lse = tl.log(out_se) + max_lse
+        tl.store(output_lse + head_idx * num_tokens + token_idx, out_lse)
+
     # NOTE(woosuk): Be careful with the numerical stability.
     # We should compute the scale first, and then multiply it with the output.
     # Do not multiply the output with tl.exp(p_lse) or tl.exp(s_lse) directly.
-    p_scale = tl.exp(p_lse) / out_se
-    s_scale = tl.exp(s_lse) / out_se
+    # p_scale = tl.exp(p_lse) / out_se
+    # s_scale = tl.exp(s_lse) / out_se
+    p_scale = p_lse_exp / out_se
+    s_scale = s_lse_exp / out_se
     out = p_out * p_scale + s_out * s_scale
     tl.store(output + token_idx * num_heads * HEAD_SIZE +
              head_idx * HEAD_SIZE + head_arange,
