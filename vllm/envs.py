@@ -107,6 +107,7 @@ if TYPE_CHECKING:
     VLLM_TPU_BUCKET_PADDING_GAP: int = 0
     VLLM_USE_DEEP_GEMM: bool = False
     VLLM_XGRAMMAR_CACHE_MB: int = 0
+    VLLM_DISABLE_MERGE_ATTN_CUDA_OP: bool = False
 
 
 def get_default_cache_root():
@@ -704,6 +705,10 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # It can be changed with this variable if needed for some reason.
     "VLLM_XGRAMMAR_CACHE_MB":
     lambda: int(os.getenv("VLLM_XGRAMMAR_CACHE_MB", "512")),
+
+    # Force disable merge_attn_states CUDA op, use Triton kernel.
+    "VLLM_DISABLE_MERGE_ATTN_CUDA_OP":
+    lambda: bool(int(os.getenv("VLLM_DISABLE_MERGE_ATTN_CUDA_OP", "0"))),
 }
 
 # end-env-vars-definition
