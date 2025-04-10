@@ -49,6 +49,27 @@ NUM_QUERY_HEADS = [4, 8, 16, 32, 48, 64]
 HEAD_SIZES = [32, 48, 64, 96, 128, 256]
 DTYPES = [torch.float32, torch.half, torch.bfloat16]
 
+all_case_info: list[tuple] = []
+
+
+def generate_markdown_table():
+    global all_case_info
+    table_header = ("| tokens | heads | headsize | dtype "
+                    "| device | torch | triton | cuda | speedup |")
+    table_separator = "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"
+    print(table_header)
+    print(table_separator)
+    for info in all_case_info:
+        (num_tokens, num_heads, head_size, dtype, device,
+         avg_time_torch_kernel, avg_time_triton_kernel, avg_time_cuda_kernel,
+         performance_improved) = info
+        dtype = str(dtype).replace("torch.", "")
+        print(f"| {num_tokens} | {num_heads} | {head_size} "
+              f"| {dtype} | {device} | {avg_time_torch_kernel:.5f}ms "
+              f"| {avg_time_triton_kernel:.5f}ms "
+              f"| {avg_time_cuda_kernel:.5f}ms "
+              f"| {performance_improved:.4f}x |")
+
 
 @pytest.mark.parametrize("num_tokens", NUM_BATCH_TOKENS)
 @pytest.mark.parametrize("num_query_heads", NUM_QUERY_HEADS)
@@ -225,3 +246,12 @@ def test_merge_attn_states(num_tokens: int, num_query_heads: int,
     print("All output values test passed! All inf values "
           "are correctly replaced with -inf.")
     print("-" * 100)
+
+    device = current_platform.get_device_name()
+    all_case_info.append(
+        (NUM_TOKENS, NUM_HEADS, HEAD_SIZE, output_dtype, device,
+         avg_time_torch_kernel, avg_time_triton_kernel, avg_time_cuda_kernel,
+         performance_improved))
+    if len(all_case_info) == (len(NUM_BATCH_TOKENS) * len(HEAD_SIZES) *
+                              len(NUM_QUERY_HEADS) * len(DTYPES)):
+        generate_markdown_table()
